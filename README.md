@@ -5,6 +5,7 @@ Worker Nodes: Ubuntu 20.04 / 22.04 LTS
 Ensure each instance has at least:
  - 2 CPUs
  - 2 GB RAM
+ - 20 To 30 GB SSD
 2. Security Group Rules
 Configure the security group to allow the following inbound traffic:
 Port/Protocol	Purpose
