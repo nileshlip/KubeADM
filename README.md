@@ -1,27 +1,25 @@
 # Kubernetes Cluster Setup on AWS EC2
 
 ## AWS EC2 Instances Configuration
-- **Master Node**: Ubuntu 20.04 / 22.04 LTS  
-- **Worker Nodes**: Ubuntu 20.04 / 22.04 LTS  
-- **Minimum Requirements for Each Instance:**
-  - 2 CPUs
-  - 2 GB RAM
-  - 20 to 30 GB SSD
+**Master Node:** Ubuntu 20.04 / 22.04 LTS  
+**Worker Nodes:** Ubuntu 20.04 / 22.04 LTS  
+Ensure each instance has at least:
+- 2 CPUs
+- 2 GB RAM
+- 20 to 30 GB SSD
 
 ## Security Group Rules
 Configure the security group to allow the following inbound traffic:
 
-| Port/Protocol  | Purpose |
-|---------------|---------|
-| 22/TCP       | SSH access |
-| 6443/TCP     | Kubernetes API server |
+| Port/Protocol | Purpose |
+|--------------|---------|
+| 22/TCP (SSH) | SSH access |
+| 6443/TCP | Kubernetes API server |
 | 2379-2380/TCP | etcd communication (Master) |
 | 10250-10255/TCP | Kubelet API |
-| 179/TCP      | Calico networking (BGP) |
-| 8472/UDP     | VXLAN (Calico) traffic |
-| ICMP         | Ping (for diagnostics) |
-
----
+| 179/TCP | Calico networking (BGP) |
+| 8472/UDP | VXLAN (Calico) traffic |
+| ICMP | Ping (for diagnostics) |
 
 ## Step 1: SSH into the EC2 Instances
 Use your private key to SSH into both the master and worker nodes:
@@ -30,7 +28,6 @@ ssh -i 'your-key.pem' ubuntu@<instance-public-ip>
 ```
 
 ## Step 2: Disable Swap on All Nodes
-Kubernetes does not support swap. Disable it temporarily and permanently:
 ```sh
 sudo swapoff -a
 sudo sed -i '/ swap / s/^/#/' /etc/fstab
@@ -43,7 +40,7 @@ sudo apt install -y docker.io
 sudo systemctl enable docker
 sudo systemctl start docker
 ```
-Verify the Docker installation:
+Verify Docker installation:
 ```sh
 docker --version
 ```
@@ -85,14 +82,10 @@ kubectl get nodes
 ## Step 6: Install a Pod Network (Calico)
 ```sh
 kubectl apply -f https://docs.projectcalico.org/v3.25/manifests/calico.yaml
-```
-Check the status of Calico pods:
-```sh
 kubectl get pods --all-namespaces
 ```
 
 ## Step 7: Join Worker Nodes to the Cluster
-On the master node, get the join command:
 ```sh
 kubeadm token create --print-join-command
 ```
@@ -105,109 +98,107 @@ sudo kubeadm join <master-private-ip>:6443 --token <token> --discovery-token-ca-
 ```sh
 kubectl get nodes
 ```
-You should see both the master and worker nodes in the `READY` state.
 
 ## Step 9: Deploy a Test Application
 ```sh
 kubectl run nginx --image=nginx --port=80
-```
-Expose nginx as a service:
-```sh
 kubectl expose pod nginx --type=NodePort --port=80
-```
-Get the service details:
-```sh
 kubectl get svc nginx
 ```
-Access the nginx service:
+Access the nginx service using the public IP of any worker node and the NodePort:
 ```sh
 http://<worker-public-ip>:<NodePort>
 ```
 
----
-
 ## Step 10: Kubernetes Commands for Pods, Scaling, Replicas, Services, and Deployments
 
-### General Commands:
+### Basic Kubernetes Commands
 ```sh
-kubectl get all               # List all resources
-kubectl get pod               # List all pods
-kubectl run my-pod --image=redhat/ubi8 --port=80  # Create a Pod
-```
-
-### Image Management:
-```sh
-docker search redhat         # Search images from DockerHub
-```
-
-### Manifest Files:
-```sh
-kubectl get po -o yaml       # Get manifest file
-kubectl apply -f pod1.yml    # Create a pod using a manifest file
-```
-
-### Node & Pod Information:
-```sh
-kubectl get po -o wide       # Get node information
+kubectl get all  # List all resources
+kubectl get pod  # List all pods
+kubectl get po -o yaml  # Get manifest file
+kubectl get po -o wide  # Get node information
 kubectl describe po testpod  # Get details of a pod
+kubectl get po testpod -o yaml > mypod.yaml  # Backup YAML content
+kubectl exec testpod -it -c denish -- /bin/bash  # Enter a container
+kubectl delete pod testpod  # Delete a pod
+kubectl –help  # See all K8S commands
+kubectl get rs  # List of ReplicaSets
+kubectl scale rs myreplicaset --replicas=8  # Scale ReplicaSets
+kubectl create -f deploy.yaml  # Create deployment using YAML
+kubectl scale deployment nginx-deployment --replicas=5  # Scale deployment
+kubectl run my-replicaset --image=ubuntu --replicas=3  # Create ReplicaSet manually
+kubectl create deployment mydeployment --image=ubuntu --replicas=2  # Create Deployment manually
+kubectl scale deployment mydeployment --replicas=5  # Scale deployment
 ```
 
-### Backup YAML Content:
+### Creating a Pod
 ```sh
-kubectl get po testpod -o yaml > mypod.yaml  # Backup your YAML content
-```
-
-### Container Access:
-```sh
-kubectl exec testpod -it -c denish -- /bin/bash  # Access container shell
-```
-
-### Replicas & Scaling:
-```sh
-nano replica.yaml                    # Create manifest file
-kubectl get rs                        # List all ReplicaSets
-kubectl scale rs myreplicaset --replicas=8  # Scale up/down ReplicaSets
-```
-
-### Deployments:
-```sh
-kubectl create -f deploy.yaml         # Create Deployment using a manifest
-kubectl scale deployment nginx-deployment --replicas=5  # Scale up/down Deployment
-```
-
-### Deletion Commands:
-```sh
-kubectl delete rs myreplicaset   # Delete ReplicaSet
-kubectl delete pod testpod       # Delete Pod
-```
-
-### Help Command:
-```sh
-kubectl –help                     # View all Kubernetes commands
-```
-
+vim pod1.yml
 ---
-
-## Step 11: Troubleshooting
-If a node shows as `NotReady`:
-- Ensure the Calico network is correctly installed.
-- Verify Docker is running on all nodes:
-  ```sh
-  sudo systemctl status docker
-  ```
-- Check logs on the worker node:
-  ```sh
-  journalctl -u kubelet -f
-  ```
-
-If you need to reset a node:
+apiVersion: v1
+kind: Pod
+metadata:
+  name: testpod
+spec:
+  containers:
+  - name: denish
+    image: ubuntu
+    command: ["/bin/bash", "-c", "while true; do echo Hello-devops_engineer; sleep 5 ; done"]
+  restartPolicy: Never
+```
+Apply the pod:
 ```sh
-sudo kubeadm reset -f
-sudo rm -rf /etc/kubernetes/ /var/lib/etcd /var/lib/kubelet /etc/cni /var/lib/cni
+kubectl apply -f pod1.yml
 ```
 
+### Creating a Multi-Container Pod
+```sh
+vim pod2.yml
 ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: testpod3
+spec:
+  containers:
+  - name: nilesh
+    image: ubuntu
+    command: ["/bin/bash", "-c", "while true; do echo sevenmentor pune; sleep 5 ; done"]
+  - name: huzaifa
+    image: ubuntu
+    command: ["/bin/bash", "-c", "while true; do echo Hello-devops engineers; sleep 5 ; done"]
+```
+Apply the pod:
+```sh
+kubectl apply -f pod2.yml
+```
 
-## Step 12: Conclusion
-You have successfully set up a Kubernetes cluster on AWS EC2 using `kubeadm` with Calico networking. You can now deploy and manage applications on your cluster.
+### ReplicaSet Example
+```sh
+vim myreplicaset.yml
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: myreplicaset
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+      - name: mycontainer
+        image: ubuntu
+        command: ["/bin/bash", "-c", "while true; do echo Running ReplicaSet; sleep 5; done"]
+```
+Apply the ReplicaSet:
+```sh
+kubectl apply -f myreplicaset.yml
+```
 
